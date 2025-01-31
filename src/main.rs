@@ -2,27 +2,30 @@
 
 use std::mem;
 use windows::{
-    core::*, Win32::Foundation::*, Win32::UI::Input::KeyboardAndMouse::*,
-    Win32::UI::WindowsAndMessaging::*,
+    core::*,
+    Win32::{
+        Foundation::*,
+        UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
+    },
 };
 
-static mut HOOK: HHOOK = HHOOK(0);
-
-fn main() -> Result<()> {
-    unsafe {
-        HOOK = SetWindowsHookExA(WH_KEYBOARD_LL, Some(keyboard_hook_proc), None, 0)?;
-
-        let mut msg = MSG::default();
-        while GetMessageA(&mut msg, HWND::default(), 0, 0).as_bool() {
-            TranslateMessage(&msg);
-            DispatchMessageA(&msg);
-        }
-
-        if !UnhookWindowsHookEx(HOOK).as_bool() {
-            return Err(Error::from_win32());
-        }
+fn create_kbd_input(vk_code: u16, key_up: bool) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(vk_code),
+                wScan: 0,
+                dwFlags: if key_up {
+                    KEYEVENTF_KEYUP
+                } else {
+                    KEYBD_EVENT_FLAGS(0)
+                },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
     }
-    Ok(())
 }
 
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -33,6 +36,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
             if wparam.0 == WM_KEYDOWN as usize {
                 let shift_state = GetAsyncKeyState(i32::from(VK_SHIFT.0));
                 if (shift_state as i16) < 0 {
+                    // shift is pressed
                     let input = INPUT {
                         r#type: INPUT_KEYBOARD,
                         Anonymous: INPUT_0 {
@@ -45,27 +49,33 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
                             },
                         },
                     };
-                    SendInput(&[input], mem::size_of::<INPUT>() as i32);
+                    let cb_size = i32::try_from(mem::size_of::<INPUT>());
+                    match cb_size {
+                        Ok(cb_size) => {
+                            SendInput(&[input], cb_size);
+                        }
+                        Err(_) => panic!("SendInput failed"),
+                    }
                 } else {
-                    keybd_event(
-                        u8::try_from(VK_SHIFT.0).unwrap(),
-                        0,
-                        KEYBD_EVENT_FLAGS(0),
-                        0,
-                    );
-                    keybd_event(
-                        0x12, // VK_MENU (Alt key)
-                        0,
-                        KEYBD_EVENT_FLAGS(0),
-                        0,
-                    );
-                    keybd_event(0x12, 0, KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0), 0);
-                    keybd_event(
-                        u8::try_from(VK_SHIFT.0).unwrap(),
-                        0,
-                        KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0),
-                        0,
-                    );
+                    // Presses win + space, then releases space and afterwards win
+                    let inputs = [
+                        create_kbd_input(VK_LWIN.0, false),
+                        create_kbd_input(VK_SPACE.0, false),
+                        create_kbd_input(VK_SPACE.0, true),
+                        create_kbd_input(VK_LWIN.0, true),
+                    ];
+
+                    let result = unsafe {
+                        SendInput(
+                            &inputs,
+                            i32::try_from(mem::size_of::<INPUT>())
+                                .expect("Converting sizeof Input Failed"),
+                        )
+                    };
+
+                    if result == 0 {
+                        panic!("SendInput failed");
+                    }
                 }
                 return LRESULT(1);
             }
@@ -73,3 +83,40 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
     }
     CallNextHookEx(HOOK, code, wparam, lparam)
 }
+
+static mut HOOK: HHOOK = HHOOK(0);
+
+fn main() -> Result<()> {
+    unsafe {
+        HOOK = SetWindowsHookExA(WH_KEYBOARD_LL, Some(keyboard_hook_proc), None, 0)?;
+
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }
+
+        if !UnhookWindowsHookEx(HOOK).as_bool() {
+            return Err(Error::from_win32());
+        }
+    }
+    Ok(())
+}
+
+// fn get_thread_id() -> u32 {
+//     unsafe {
+//         let hwnd: HWND = WindowsAndMessaging::GetForegroundWindow(); // Get the active window
+//         let mut process_id: u32 = 0;
+//         let thread_id = WindowsAndMessaging::GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+
+//         thread_id
+//     }
+// }
+
+// fn get_foreground_layout() -> HKL {
+//     unsafe {
+//         let thread_id = get_thread_id();
+
+//         GetKeyboardLayout(thread_id) // Returns the layout for the active window's thread
+//     }
+// }
