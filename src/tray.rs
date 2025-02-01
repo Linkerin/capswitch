@@ -37,19 +37,18 @@ fn get_icon() -> Icon {
 
 fn get_metadata() -> AboutMetadata {
     let metadata = AboutMetadataBuilder::new()
-        .name(Some(env::var("CARGO_PKG_NAME").unwrap()))
+        .name(Some(env!("CARGO_PKG_NAME")))
         .authors(Some(
-            env::var("CARGO_PKG_AUTHORS")
-                .unwrap()
+            env!("CARGO_PKG_AUTHORS")
                 .split(',')
                 .map(|s| s.to_string())
                 .collect(),
         ))
-        .license(Some(env::var("CARGO_PKG_LICENSE").unwrap()))
-        .version(Some(env::var("CARGO_PKG_VERSION").unwrap()))
-        .website(Some(env::var("CARGO_PKG_REPOSITORY").unwrap()))
+        .license(Some(env!("CARGO_PKG_LICENSE")))
+        .version(Some(env!("CARGO_PKG_VERSION")))
+        .website(Some(env!("CARGO_PKG_REPOSITORY")))
         .website_label(Some("GitHub"))
-        .comments(Some(env::var("CARGO_PKG_DESCRIPTION").unwrap()))
+        .comments(Some(env!("CARGO_PKG_DESCRIPTION")))
         .build();
 
     metadata
