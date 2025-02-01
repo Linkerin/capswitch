@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "CapsWitch"
+version = "0.2.1"
+dependencies = [
+ "image",
+ "tray-icon",
+ "windows",
+ "winreg",
+ "winresource",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -184,17 +195,6 @@ dependencies = [
  "glib-sys",
  "libc",
  "system-deps",
-]
-
-[[package]]
-name = "capswitch"
-version = "0.2.0"
-dependencies = [
- "image",
- "tray-icon",
- "windows",
- "winreg",
- "winresource",
 ]
 
 [[package]]
