@@ -60,7 +60,7 @@ jobs:
           & "${{ steps.locate_signtool.outputs.signtool_path }}" sign /f "certificate.pfx" /t http://timestamp.digicert.com /fd SHA256 /p $password "target/release/CapsWitch.exe"
 
       - name: Sign the binaries with Cosign
-        run: |
+        run:
           cosign sign-blob -y --output-signature
           target/release/CapsWitch.exe.sig target/release/CapsWitch.exe
 
