@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup update
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@main
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload the binaries
+        uses: actions/upload-artifact@v4
+        with:
+          path: target/release/CapsWitch.exe
+
+      - name: Sign the binaries
+        run:
+          cosign sign -y --output-signature target/release/CapsWitch.exe.sig
+          target/release/CapsWitch.exe
+
+      - name: Upload the binaries
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/release/CapsWitch.exe
+            target/release/CapsWitch.exe.sig
