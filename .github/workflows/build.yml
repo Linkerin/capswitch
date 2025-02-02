@@ -24,11 +24,11 @@ jobs:
 
       - name: Extract Version from Cargo.toml
         id: version
+        shell: pwsh
         run: |
-          # Extract the version from Cargo.toml
-          VERSION=$(grep -m1 '^version =' Cargo.toml | cut -d '"' -f 2)
-          echo "Extracted version: $VERSION"
-          echo "::set-output name=version::$VERSION"
+          $version = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*?)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+          echo "Extracted version: $version"
+          echo "::set-output name=version::$version"
 
       - name: Build
         run: cargo build --release
