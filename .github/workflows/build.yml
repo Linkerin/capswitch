@@ -33,16 +33,42 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Sign the binaries
-        run:
+      - name: Decode Certificate
+        shell: pwsh
+        run: |
+          # Decode the Base64 string into a .pfx file
+          $certBase64 = "${{ secrets.CERTIFICATE_PFX }}"
+          $certBytes = [System.Convert]::FromBase64String($certBase64)
+          [System.IO.File]::WriteAllBytes("certificate.pfx", $certBytes)
+
+      - name: Locate signtool.exe
+        id: locate_signtool
+        shell: pwsh
+        run: |
+          $signtoolPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtoolPath) {
+            Write-Error "signtool.exe not found!"
+            exit 1
+          }
+          echo "Found signtool.exe at: $signtoolPath"
+          echo "::set-output name=signtool_path::$signtoolPath"
+
+      - name: Sign the Executable
+        shell: pwsh
+        run: |
+          $password = "${{ secrets.CERTIFICATE_PASSWORD }}"
+          & "${{ steps.locate_signtool.outputs.signtool_path }}" sign /f "certificate.pfx" /t http://timestamp.digicert.com /fd SHA256 /p $password "target/release/CapsWitch.exe"
+
+      - name: Sign the binaries with Cosign
+        run: |
           cosign sign-blob -y --output-signature
           target/release/CapsWitch.exe.sig target/release/CapsWitch.exe
 
       - name: Upload the binaries
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version.outputs.version }} # Use the version from Cargo.toml
-          generate_release_notes: true # Automatically generate release notes
+          tag_name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
           files: |
             target/release/CapsWitch.exe
             target/release/CapsWitch.exe.sig

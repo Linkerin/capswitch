@@ -6,7 +6,7 @@ authors = ["Alexei Gusev <gusev@snipshot.dev>"]
 license = "MIT"
 repository = "https://github.com/Linkerin/capswitch"
 keywords = ["capslock", "keyboard", "layout", "switch", "windows"]
-description = "CapsWitch — a simple app that lets you switch keyboard layouts with a press of the CapsLock key."
+description = "CapsWitch — a simple Windows app that lets you switch keyboard layouts with CapsLock."
 
 [package.metadata.windows]
 icon = "assets/icon.png"
