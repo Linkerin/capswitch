@@ -25,15 +25,10 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Upload the binaries
-        uses: actions/upload-artifact@v4
-        with:
-          path: target/release/CapsWitch.exe
-
       - name: Sign the binaries
         run:
-          cosign sign -y --output-signature target/release/CapsWitch.exe.sig
-          target/release/CapsWitch.exe
+          cosign sign-blob -y --output-signature
+          target/release/CapsWitch.exe.sig target/release/CapsWitch.exe
 
       - name: Upload the binaries
         uses: softprops/action-gh-release@v1
