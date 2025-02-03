@@ -25,7 +25,9 @@ jobs:
         uses: sigstore/cosign-installer@main
 
       - name: Install MSIX Packaging Tool
-        run: winget install "MSIX Packaging Tool"
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/msixpackagingtool" -OutFile "msixpackagingtool.msix"
+          Add-AppxPackage -Path "msixpackagingtool.msix"
 
       - name: Extract Version from Cargo.toml
         id: version
