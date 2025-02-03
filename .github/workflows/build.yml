@@ -33,12 +33,13 @@ jobs:
         run: |
           $version = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*?)"' | ForEach-Object { $_.Matches.Groups[1].Value }
           echo "Extracted version: $version"
-          echo "::set-output name=version::$version"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build
         run: cargo build --release
 
       - name: Copy AppxManifest.xml
+        shell: pwsh
         run: Copy-Item -Path AppxManifest.xml -Destination target/release
 
       - name: Locate MakeAppx.exe
@@ -55,7 +56,9 @@ jobs:
 
       - name: Package MSIX
         shell: pwsh
-        run: "${{ steps.locate_makeappx.outputs.makeappx_path }}" pack /d target/release /p target/release/CapsWitch-installer.msix
+        run: |
+          $makeappx_exe = "${{ steps.locate_makeappx.outputs.makeappx_path }}"
+          & $makeappx_exe pack /d target/release /p target/release/CapsWitch-installer.msix
 
       - name: Decode Certificate
         shell: pwsh
@@ -90,7 +93,7 @@ jobs:
           target/release/CapsWitch.exe.sig target/release/CapsWitch.exe
 
       - name: Upload the binaries
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           files: |
