@@ -3,6 +3,7 @@
 mod autoload;
 mod constants;
 mod tray;
+mod utils;
 
 use std::mem;
 use windows::{
@@ -93,6 +94,8 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
 static mut HOOK: HHOOK = HHOOK(0);
 
 fn main() -> Result<()> {
+    let _ = utils::check_for_another_instance();
+
     tray::create_tray();
 
     unsafe {
@@ -104,7 +107,7 @@ fn main() -> Result<()> {
             DispatchMessageA(&msg);
         }
 
-        if !UnhookWindowsHookEx(HOOK).as_bool() {
+        if !UnhookWindowsHookEx(HOOK).is_ok() {
             return Err(Error::from_win32());
         }
     }

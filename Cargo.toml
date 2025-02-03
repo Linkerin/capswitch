@@ -14,12 +14,14 @@ icon = "assets/icon.png"
 [dependencies]
 image = "0.25.5"
 tray-icon = "0.19.2"
-windows = { version = "0.48", features = [
+windows = { version = "0.53", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    "Win32_Security",
     "Win32_System_Com",
+    "Win32_System_Threading",
     "Win32_UI_TextServices",
 ] }
 winreg = "0.55.0"

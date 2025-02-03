@@ -1,5 +1,4 @@
 use crate::autoload::{is_autoload_enabled, remove_autoload, set_autoload};
-use crate::constants::APP_NAME;
 use crate::IS_PAUSED;
 use image::ImageReader;
 use std::{env, process, thread};
@@ -146,7 +145,7 @@ pub fn create_tray() {
 
         let icon: Icon = get_icon();
         let _tray_icon = TrayIconBuilder::new()
-            .with_tooltip(APP_NAME)
+            .with_tooltip(env!("CARGO_PKG_NAME"))
             .with_icon(icon)
             .with_menu(Box::new(tray_menu))
             .build()
