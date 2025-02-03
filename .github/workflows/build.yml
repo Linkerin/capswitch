@@ -72,3 +72,4 @@ jobs:
           files: |
             target/release/CapsWitch.exe
             target/release/CapsWitch.exe.sig
+            certificate.crt
