@@ -25,14 +25,15 @@ fn get_foreground_layout() -> HKL {
 
 fn change_keyboard_layout(hkl: &HKL, curr_layout: HKL) {
     unsafe {
-        let result = PostMessageA(
+        let result = SendMessageA(
             GetForegroundWindow(),
             WM_INPUTLANGCHANGEREQUEST,
             WPARAM(0),
             LPARAM(hkl.0),
         );
 
-        if result.is_ok() {
+        // In case of success
+        if result.0 == 0 {
             PREV_LAYOUT.0 = Some(curr_layout);
         }
     }
