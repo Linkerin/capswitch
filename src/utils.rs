@@ -1,3 +1,5 @@
+use crate::IS_CIRCULAR_SWITCH_MODE;
+use std::env;
 use std::result::Result;
 use windows::{
     core::*,
@@ -29,4 +31,15 @@ pub fn check_for_another_instance() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+pub fn get_mode() {
+    let args: Vec<String> = env::args().collect();
+    let mode = args.get(1);
+
+    if mode.is_some() && mode.unwrap() == "--circular" {
+        unsafe {
+            IS_CIRCULAR_SWITCH_MODE = true;
+        }
+    }
 }

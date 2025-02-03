@@ -1,5 +1,5 @@
 use crate::autoload::{is_autoload_enabled, remove_autoload, set_autoload};
-use crate::IS_PAUSED;
+use crate::{IS_CIRCULAR_SWITCH_MODE, IS_PAUSED};
 use image::ImageReader;
 use std::{env, process, thread};
 use tray_icon::{
@@ -10,6 +10,20 @@ use tray_icon::{
     Icon, TrayIconBuilder,
 };
 use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::*};
+
+enum ModeLabel {
+    Circular,
+    Previous,
+}
+
+impl ModeLabel {
+    fn as_str(&self) -> &str {
+        match self {
+            ModeLabel::Circular => "Switch mode: circular",
+            ModeLabel::Previous => "Switch mode: previous",
+        }
+    }
+}
 
 struct MenuItems {
     toggle: MenuItem,
@@ -61,8 +75,14 @@ fn get_menu_items() -> MenuItems {
         .build();
     let menu_i_mode: MenuItem = MenuItemBuilder::new()
         .id(MenuId::new("mode"))
-        .text("Circular") // default option will be Previous
-        .enabled(false)
+        .text(unsafe {
+            if IS_CIRCULAR_SWITCH_MODE {
+                ModeLabel::Circular.as_str()
+            } else {
+                ModeLabel::Previous.as_str()
+            }
+        })
+        .enabled(true)
         .build();
     let menu_i_autoload: MenuItem = MenuItemBuilder::new()
         .id(MenuId::new("autoload"))
@@ -103,15 +123,38 @@ fn autoload_handler(menu_i: &MenuItem) {
             menu_i.set_text("Enable autoload");
         }
     } else {
-        let result = set_autoload();
-        if result {
-            menu_i.set_text("Disable autoload");
+        unsafe {
+            let result = set_autoload(if IS_CIRCULAR_SWITCH_MODE {
+                Some(String::from("--circular"))
+            } else {
+                None
+            });
+
+            if result {
+                menu_i.set_text("Disable autoload");
+            }
         }
     }
 }
 
-fn mode_hander() {
-    println!("Mode menu item clicked");
+fn mode_hander(menu_i: &MenuItem) {
+    unsafe {
+        if IS_CIRCULAR_SWITCH_MODE {
+            IS_CIRCULAR_SWITCH_MODE = false;
+            menu_i.set_text(ModeLabel::Previous.as_str());
+
+            if is_autoload_enabled() {
+                set_autoload(None);
+            }
+        } else {
+            IS_CIRCULAR_SWITCH_MODE = true;
+            menu_i.set_text(ModeLabel::Circular.as_str());
+
+            if is_autoload_enabled() {
+                set_autoload(Some(String::from("--circular")));
+            }
+        }
+    }
 }
 
 fn quit_hander() {
@@ -168,7 +211,7 @@ pub fn create_tray() {
                     match event.id.as_ref() {
                         "quit" => quit_hander(),
                         "autoload" => autoload_handler(&menu_items.autoload),
-                        "mode" => mode_hander(),
+                        "mode" => mode_hander(&menu_items.mode),
                         "toggle" => toggle_handler(&menu_items.toggle),
                         _ => {
                             println!("Menu item clicked: {:?}", event.id);
