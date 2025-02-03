@@ -24,6 +24,14 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@main
 
+      # - name: Install MSIX Packaging Tool
+      #   run: choco install msix-packaging
+      - name: Install MSIX Packaging Tool
+        run: winget install "MSIX Packaging Tool"
+        # run: |
+        #   Invoke-WebRequest -Uri "https://aka.ms/msixpackagingtool" -OutFile "msixpackagingtool.msix"
+        #   Add-AppxPackage -Path "msixpackagingtool.msix"
+
       - name: Extract Version from Cargo.toml
         id: version
         shell: pwsh
@@ -34,6 +42,24 @@ jobs:
 
       - name: Build
         run: cargo build --release
+
+      - name: Copy AppxManifest.xml
+        run: Copy-Item -Path AppxManifest.xml -Destination target/release
+
+      - name: Locate MakeAppx.exe
+        id: locate_makeappx
+        shell: pwsh
+        run: |
+          makeappxlPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "MakeAppx.exe" | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $makeappxPath) {
+            Write-Error "MakeAppx.exe not found!"
+            exit 1
+          }
+          echo "Found MakeAppx.exe at: $makeappxPath"
+          echo "makeappx_path=$makeappxPath" >> $env:GITHUB_OUTPUT
+
+      - name: Package MSIX
+        run: "${{ steps.locate_makeappx.outputs.makeappx_path }}" pack /d target/release /p target/release/CapsWitch-installer.msix 
 
       - name: Decode Certificate
         shell: pwsh
@@ -60,6 +86,7 @@ jobs:
         run: |
           $password = "${{ secrets.CERTIFICATE_PASSWORD }}"
           & "${{ steps.locate_signtool.outputs.signtool_path }}" sign /f "certificate.pfx" /t http://timestamp.digicert.com /fd SHA256 /p $password "target/release/CapsWitch.exe"
+          & "${{ steps.locate_signtool.outputs.signtool_path }}" sign /f "certificate.pfx" /t http://timestamp.digicert.com /fd SHA256 /p $password "target/release/CapsWitch-installer.msix"
 
       - name: Sign the binaries with Cosign
         run:
@@ -71,6 +98,7 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           files: |
+            target/release/CapsWitch-installer.msix
             target/release/CapsWitch.exe
             target/release/CapsWitch.exe.sig
             certificate.crt
