@@ -40,9 +40,11 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Copy AppxManifest.xml
+      - name: Copy AppxManifest.xml and assets
         shell: pwsh
-        run: Copy-Item -Path AppxManifest.xml -Destination target/release
+        run: |
+          Copy-Item -Path AppxManifest.xml -Destination target/release
+          Copy-Item -Path assets -Destination target/release -Recurse
 
       - name: Locate MakeAppx.exe
         id: locate_makeappx
