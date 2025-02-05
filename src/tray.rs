@@ -1,5 +1,5 @@
 use crate::autoload::{is_autoload_enabled, remove_autoload, set_autoload};
-use crate::{IS_CIRCULAR_SWITCH_MODE, IS_PAUSED};
+use crate::APP_STATE;
 use image::ImageReader;
 use std::{env, process, thread};
 use tray_icon::{
@@ -17,17 +17,65 @@ enum ModeLabel {
 }
 
 impl ModeLabel {
+    fn as_str(&self) -> String {
+        let prefix = "Previous mode:";
+
+        match self {
+            ModeLabel::Circular => format!("{} disabled", prefix),
+            ModeLabel::Previous => format!("{} enabled", prefix),
+        }
+    }
+
+    fn get_label(is_enabled: &bool) -> String {
+        if *is_enabled {
+            ModeLabel::Previous.as_str()
+        } else {
+            ModeLabel::Circular.as_str()
+        }
+    }
+}
+
+enum ToggleLabel {
+    Pause,
+    Resume,
+}
+
+impl ToggleLabel {
     fn as_str(&self) -> &str {
         match self {
-            ModeLabel::Circular => "Switch mode: circular",
-            ModeLabel::Previous => "Switch mode: previous",
+            ToggleLabel::Pause => "Pause",
+            ToggleLabel::Resume => "Resume",
+        }
+    }
+}
+
+enum AutoloadLabel {
+    Enabled,
+    Disabled,
+}
+
+impl AutoloadLabel {
+    fn as_str(&self) -> String {
+        let prefix = "Autoload:";
+
+        match self {
+            AutoloadLabel::Enabled => format!("{} enabled", prefix),
+            AutoloadLabel::Disabled => format!("{} disabled", prefix),
+        }
+    }
+
+    fn get_label() -> String {
+        if is_autoload_enabled() {
+            AutoloadLabel::Enabled.as_str()
+        } else {
+            AutoloadLabel::Disabled.as_str()
         }
     }
 }
 
 struct MenuItems {
     toggle: MenuItem,
-    mode: MenuItem,
+    prev_mode: MenuItem,
     autoload: MenuItem,
     separator: PredefinedMenuItem,
     about: PredefinedMenuItem,
@@ -70,27 +118,18 @@ fn get_metadata() -> AboutMetadata {
 fn get_menu_items() -> MenuItems {
     let menu_i_toggle: MenuItem = MenuItemBuilder::new()
         .id(MenuId::new("toggle"))
-        .text("Pause")
+        .text(ToggleLabel::Pause.as_str())
         .enabled(true)
         .build();
-    let menu_i_mode: MenuItem = MenuItemBuilder::new()
+    let menu_i_prev_mode: MenuItem = MenuItemBuilder::new()
         .id(MenuId::new("mode"))
-        .text(unsafe {
-            if IS_CIRCULAR_SWITCH_MODE {
-                ModeLabel::Circular.as_str()
-            } else {
-                ModeLabel::Previous.as_str()
-            }
-        })
+        .text(ModeLabel::get_label(&APP_STATE.is_previous_mode().unwrap()))
         .enabled(true)
         .build();
+
     let menu_i_autoload: MenuItem = MenuItemBuilder::new()
         .id(MenuId::new("autoload"))
-        .text(if is_autoload_enabled() {
-            "Disable autoload"
-        } else {
-            "Enable autoload"
-        })
+        .text(AutoloadLabel::get_label())
         .enabled(true)
         .build();
     let menu_i_quit: MenuItem = MenuItemBuilder::new()
@@ -106,7 +145,7 @@ fn get_menu_items() -> MenuItems {
 
     let items = MenuItems {
         toggle: menu_i_toggle,
-        mode: menu_i_mode,
+        prev_mode: menu_i_prev_mode,
         autoload: menu_i_autoload,
         separator,
         about: menu_i_about,
@@ -120,39 +159,60 @@ fn autoload_handler(menu_i: &MenuItem) {
     if is_autoload_enabled() {
         let result = remove_autoload();
         if result {
-            menu_i.set_text("Enable autoload");
+            menu_i.set_text(AutoloadLabel::Disabled.as_str());
         }
     } else {
-        unsafe {
-            let result = set_autoload(if IS_CIRCULAR_SWITCH_MODE {
-                Some(String::from("--circular"))
-            } else {
-                None
-            });
+        let is_prev_mode = APP_STATE.is_previous_mode().unwrap_or_else(|e| {
+            eprintln!("Could not get previous mode for autoload: {}", e);
+            false
+        });
 
-            if result {
-                menu_i.set_text("Disable autoload");
-            }
+        let result = set_autoload(if is_prev_mode {
+            Some(String::from("--previous"))
+        } else {
+            None
+        });
+
+        if result {
+            menu_i.set_text(AutoloadLabel::Enabled.as_str());
         }
     }
 }
 
 fn mode_hander(menu_i: &MenuItem) {
-    unsafe {
-        if IS_CIRCULAR_SWITCH_MODE {
-            IS_CIRCULAR_SWITCH_MODE = false;
-            menu_i.set_text(ModeLabel::Previous.as_str());
+    match APP_STATE.toggle_previous_mode() {
+        Ok(is_prev_mode) => {
+            let text = ModeLabel::get_label(&is_prev_mode);
+            menu_i.set_text(text);
 
             if is_autoload_enabled() {
-                set_autoload(None);
+                if is_prev_mode {
+                    set_autoload(Some(String::from("--previous")));
+                } else {
+                    set_autoload(None);
+                }
             }
-        } else {
-            IS_CIRCULAR_SWITCH_MODE = true;
-            menu_i.set_text(ModeLabel::Circular.as_str());
+        }
+        Err(err) => {
+            eprintln!("Could not toggle mode: {}", err);
+            return;
+        }
+    }
+}
 
-            if is_autoload_enabled() {
-                set_autoload(Some(String::from("--circular")));
-            }
+fn toggle_handler(menu_i: &MenuItem) {
+    match APP_STATE.toggle_pause() {
+        Ok(is_paused) => {
+            let text = if is_paused {
+                ToggleLabel::Resume.as_str()
+            } else {
+                ToggleLabel::Pause.as_str()
+            };
+            menu_i.set_text(text);
+        }
+        Err(err) => {
+            eprintln!("Couldn't toggle pause. Error: {}", err);
+            return;
         }
     }
 }
@@ -162,15 +222,6 @@ fn quit_hander() {
     process::exit(0);
 }
 
-fn toggle_handler(menu_i: &MenuItem) {
-    unsafe {
-        IS_PAUSED = !IS_PAUSED;
-
-        let text = if IS_PAUSED { "Resume" } else { "Pause" };
-        menu_i.set_text(text);
-    }
-}
-
 pub fn create_tray() {
     thread::spawn(move || {
         let tray_menu: Menu = Menu::new();
@@ -178,7 +229,7 @@ pub fn create_tray() {
         tray_menu
             .append_items(&[
                 &menu_items.toggle,
-                &menu_items.mode,
+                &menu_items.prev_mode,
                 &menu_items.autoload,
                 &menu_items.separator,
                 &menu_items.about,
@@ -211,7 +262,7 @@ pub fn create_tray() {
                     match event.id.as_ref() {
                         "quit" => quit_hander(),
                         "autoload" => autoload_handler(&menu_items.autoload),
-                        "mode" => mode_hander(&menu_items.mode),
+                        "mode" => mode_hander(&menu_items.prev_mode),
                         "toggle" => toggle_handler(&menu_items.toggle),
                         _ => {
                             println!("Menu item clicked: {:?}", event.id);

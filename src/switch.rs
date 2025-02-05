@@ -1,4 +1,4 @@
-use crate::{IS_CIRCULAR_SWITCH_MODE, IS_PAUSED};
+use crate::APP_STATE;
 use std::mem;
 use windows::{
     core::*,
@@ -8,10 +8,7 @@ use windows::{
     },
 };
 
-struct PrevLayout(Option<HKL>);
-
 static mut HOOK: HHOOK = HHOOK(0);
-static mut PREV_LAYOUT: PrevLayout = PrevLayout(None);
 
 fn get_foreground_layout() -> HKL {
     unsafe {
@@ -23,7 +20,7 @@ fn get_foreground_layout() -> HKL {
     }
 }
 
-fn change_keyboard_layout(hkl: &HKL, curr_layout: HKL) {
+fn change_keyboard_layout(hkl: &HKL) -> LRESULT {
     unsafe {
         let result = SendMessageA(
             GetForegroundWindow(),
@@ -32,10 +29,7 @@ fn change_keyboard_layout(hkl: &HKL, curr_layout: HKL) {
             LPARAM(hkl.0),
         );
 
-        // In case of success
-        if result.0 == 0 {
-            PREV_LAYOUT.0 = Some(curr_layout);
-        }
+        result
     }
 }
 
@@ -80,7 +74,19 @@ fn imitate_keyboard_layout_change() {
 }
 
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 && !IS_PAUSED {
+    match APP_STATE.is_paused() {
+        Ok(is_paused) => {
+            if is_paused {
+                return CallNextHookEx(HOOK, code, wparam, lparam);
+            }
+        }
+        Err(e) => {
+            eprint!("Error: {:?}", e);
+            return CallNextHookEx(HOOK, code, wparam, lparam);
+        }
+    }
+
+    if code >= 0 {
         let kb_struct = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
 
         if kb_struct.vkCode == u32::from(VK_CAPITAL.0) {
@@ -109,16 +115,45 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
                     }
                 } else {
                     let curr_layout = get_foreground_layout();
-                    if PREV_LAYOUT.0.is_some() && curr_layout == PREV_LAYOUT.0.unwrap() {
-                        PREV_LAYOUT.0 = None;
-                    }
+                    let is_prev_mode = APP_STATE.is_previous_mode().unwrap_or_else(|e| {
+                        eprintln!("Error: {e}");
+                        false
+                    });
 
-                    if IS_CIRCULAR_SWITCH_MODE || PREV_LAYOUT.0.is_none() {
-                        PREV_LAYOUT.0 = Some(curr_layout);
-
+                    if !is_prev_mode {
                         imitate_keyboard_layout_change();
                     } else {
-                        change_keyboard_layout(&PREV_LAYOUT.0.unwrap(), curr_layout);
+                        let previous_layout = APP_STATE.prev_layout().unwrap_or_else(|e| {
+                            eprintln!("Error: {e}");
+                            None
+                        });
+                        match previous_layout {
+                            Some(prev_layout) => {
+                                if curr_layout == prev_layout {
+                                    imitate_keyboard_layout_change();
+                                } else {
+                                    let result = change_keyboard_layout(&prev_layout);
+                                    // In case of success
+                                    if result.0 == 0 {
+                                        match APP_STATE.set_prev_layout(Some(curr_layout)) {
+                                            Ok(_) => {}
+                                            Err(err) => {
+                                                eprintln!("Didn't manage to set previous layout to state. Error: {}", err)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                match APP_STATE.set_prev_layout(Some(curr_layout)) {
+                                    Ok(_) => {}
+                                    Err(err) => {
+                                        eprintln!("Didn't manage to set previous layout to state. Error: {}", err)
+                                    }
+                                }
+                                imitate_keyboard_layout_change();
+                            }
+                        }
                     }
                 }
                 return LRESULT(1);
